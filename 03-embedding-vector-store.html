@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stop 3: Embedding + Vector Store — The RAG Line</title>
+<meta name="description" content="How text chunks become vectors, and vectors become a searchable, disk-cached index." />
+<style>
+  :root {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+    --radius: 10px;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+      --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+      --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+      --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+    --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+    --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+    --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"] {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .2s ease, color .2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  a { color: var(--accent-ink, var(--accent)); }
+  a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--teal); outline-offset: 2px;
+  }
+  img, svg { max-width: 100%; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: .85rem 1.5rem; background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: baseline; gap: .6rem; text-decoration: none; color: var(--ink); }
+  .brand-mark { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
+  .brand-sub { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+  .topnav { display: flex; align-items: center; gap: 1.1rem; }
+  .topnav a { color: var(--ink-soft); text-decoration: none; font-size: .86rem; }
+  .topnav a:hover { color: var(--accent); }
+  .theme-toggle {
+    border: 1px solid var(--line); background: var(--paper-raised); color: var(--ink);
+    border-radius: 999px; width: 2.1rem; height: 2.1rem; display: grid; place-items: center;
+    cursor: pointer; font-size: 1rem; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  .progress-rail { height: 3px; background: var(--line-soft); }
+  .progress-fill { height: 100%; background: var(--accent); }
+
+  main { max-width: 920px; margin: 0 auto; padding: 2.6rem 1.5rem 5rem; }
+  .kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--teal); margin: 0 0 .6rem; }
+  h1.page-title { font-family: var(--serif); font-weight: 700; font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.15; margin: 0 0 .5rem; text-wrap: balance; }
+  .page-dek { font-family: var(--serif); color: var(--ink-soft); font-size: 1.15rem; line-height: 1.6; max-width: 62ch; margin: 0 0 2.2rem; }
+
+  .transit-wrap { margin: 0 0 .5rem; }
+  .transit { position: relative; display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 1.6rem .5rem 1.2rem; margin: 0 -.5rem; }
+  .track { position: absolute; left: 2.2rem; right: 2.2rem; top: 2.05rem; height: 3px; background: var(--line); z-index: 0; border-radius: 2px; }
+  .station { position: relative; z-index: 1; flex: 1 0 auto; min-width: 80px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .55rem; padding: 0 .3rem; }
+  .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--paper-raised); border: 3px solid var(--line); }
+  .station-label { font-family: var(--mono); font-size: .64rem; letter-spacing: .01em; color: var(--ink-faint); white-space: nowrap; }
+  .station.done .dot { background: var(--teal); border-color: var(--teal); }
+  .station.done .station-label { color: var(--ink-soft); }
+  .station.active .dot { background: var(--accent); border-color: var(--accent); width: 20px; height: 20px; box-shadow: 0 0 0 5px var(--accent-soft); }
+  .station.active .station-label { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .map-caption { font-family: var(--mono); font-size: .82rem; color: var(--ink-faint); margin: 0 0 3rem; }
+  .map-caption strong { color: var(--accent-ink, var(--accent)); }
+
+  .section { margin: 0 0 3.2rem; }
+  .section-eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; gap: .6rem; margin: 0 0 .7rem; }
+  .section-eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+  .section h2 { font-family: var(--serif); font-size: 1.5rem; margin: 0 0 .9rem; text-wrap: balance; }
+  .prose { max-width: 68ch; font-family: var(--serif); font-size: 1.03rem; line-height: 1.75; }
+  .prose p { margin: 0 0 1.15rem; color: var(--ink-soft); }
+  .prose strong { color: var(--ink); }
+  .prose ul, .prose ol { color: var(--ink-soft); padding-left: 1.3rem; margin: 0 0 1rem; }
+  .prose li { margin: 0 0 .45rem; }
+  .prose code { font-family: var(--mono); background: var(--paper-raised); border: 1px solid var(--line-soft); padding: .1rem .35rem; border-radius: 5px; font-size: .87em; }
+
+  .arch { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.4rem; box-shadow: var(--shadow); overflow-x: auto; }
+  .arch-node { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; font-family: var(--mono); font-size: .8rem; text-align: center; flex: 1 1 120px; min-width: 110px; }
+  .arch-node .t { display: block; font-family: var(--sans); font-size: .66rem; color: var(--ink-faint); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .arch-node.accent { border-color: var(--accent); background: var(--accent-soft); }
+  .arch-node.teal { border-color: var(--teal); background: var(--teal-soft); }
+  .arch-arrow { color: var(--ink-faint); font-size: 1.2rem; flex: 0 0 auto; }
+  @media (max-width: 640px) { .arch { flex-direction: column; align-items: stretch; } .arch-arrow { text-align: center; transform: rotate(90deg); } }
+
+  .vecwrap { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+  .vecdot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); opacity: .35; }
+  .vecdot.hot { opacity: 1; box-shadow: 0 0 0 3px var(--teal-soft); }
+
+  .callouts { display: grid; gap: 1rem; }
+  .callout { border: 1px solid var(--line-soft); border-left: 4px solid var(--ink-faint); border-radius: 8px; padding: 1rem 1.1rem; background: var(--paper-raised); }
+  .callout h3 { margin: 0 0 .4rem; font-size: .95rem; font-weight: 700; }
+  .callout p, .callout li { margin: 0; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.6; }
+  .callout--note { border-left-color: var(--teal); }
+  .callout--note h3 { color: var(--teal); }
+  .callout--mistake { border-left-color: var(--bad); }
+  .callout--mistake h3 { color: var(--bad); }
+  .callout--beginner { border-left-color: var(--accent); }
+  .callout--beginner h3 { color: var(--accent-ink, var(--accent)); }
+  .callout ul { padding-left: 1.1rem; margin: 0; }
+  .callout li + li { margin-top: .5rem; }
+  .alt-table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .6rem; }
+  .alt-table th, .alt-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-family: var(--serif); }
+  .alt-table th { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+  .concept-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.8rem; margin-top: 1.2rem; }
+  .concept-half h3 { font-family: var(--serif); font-size: 1.08rem; margin: 0 0 .6rem; color: var(--ink); }
+  .concept-half p { font-family: var(--serif); color: var(--ink-soft); font-size: .95rem; line-height: 1.7; margin: 0 0 .9rem; }
+  .concept-half p:last-child { margin-bottom: 0; }
+  @media (max-width: 720px) { .concept-split { grid-template-columns: 1fr; gap: 2rem; } }
+  .step-flow { display: flex; flex-direction: column; gap: .9rem; margin: 1.3rem 0; }
+  .step-card { display: flex; gap: 1rem; background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.2rem 1.3rem; box-shadow: var(--shadow); }
+  .step-num { flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-family: var(--serif); font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; }
+  .step-body h3 { font-family: var(--serif); font-size: 1.05rem; margin: 0 0 .5rem; color: var(--ink); }
+  .step-body p { font-family: var(--serif); color: var(--ink-soft); font-size: .95rem; line-height: 1.7; margin: 0; }
+  .step-arrow { text-align: center; color: var(--ink-faint); font-size: 1.1rem; margin: -.3rem 0; }
+
+  .codeblock { border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); margin: 0 0 1rem; }
+  .codeblock-head { display: flex; align-items: center; justify-content: space-between; background: var(--paper-raised); border-bottom: 1px solid var(--line-soft); padding: .55rem .9rem; font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); }
+  .codeblock pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; background: var(--paper-raised); }
+  .codeblock code { font-family: var(--mono); font-size: .8rem; line-height: 1.6; color: var(--ink); white-space: pre; }
+  .annot { margin: .5rem 0 1.6rem; padding-left: 1rem; border-left: 2px solid var(--line-soft); }
+  .annot p { margin: 0 0 .6rem; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.65; }
+  .annot code { font-family: var(--mono); background: var(--paper); border: 1px solid var(--line-soft); padding: .05rem .3rem; border-radius: 4px; font-size: .85em; }
+
+  .tok-keyword { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .tok-string { color: var(--teal); }
+  .tok-comment { color: var(--ink-faint); font-style: italic; }
+  .tok-number { color: var(--teal); }
+  .tok-function { color: var(--ink); font-weight: 700; }
+  .tok-decorator { color: var(--accent-ink, var(--accent)); }
+  .tok-configurable { color: var(--wine); font-weight: 700; }
+
+  .qa-item { border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: .6rem; background: var(--paper-raised); overflow: hidden; }
+  .qa-item summary { cursor: pointer; padding: .85rem 1rem; font-weight: 600; font-size: .88rem; font-family: var(--mono); list-style: none; display: flex; align-items: center; gap: .7rem; }
+  .qa-item summary::-webkit-details-marker { display: none; }
+  .qa-item summary::before { content: "+"; font-family: var(--mono); color: var(--accent); font-size: 1rem; flex: 0 0 auto; width: 1rem; }
+  .qa-item[open] summary::before { content: "\2212"; }
+  .qa-item .qa-body { padding: 0 1rem 1rem 2.7rem; color: var(--ink-soft); font-size: .85rem; font-family: var(--mono); line-height: 1.6; }
+
+  .quiz { background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.6rem; box-shadow: var(--shadow); }
+  .quiz-q { margin-bottom: 1.6rem; }
+  .quiz-q p.q-text { font-weight: 700; margin: 0 0 .7rem; font-family: var(--mono); font-size: .9rem; }
+  .quiz-options { display: grid; gap: .5rem; }
+  .quiz-option { display: flex; align-items: flex-start; gap: .6rem; border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; cursor: pointer; font-size: .85rem; font-family: var(--mono); background: var(--paper); }
+  .quiz-option:hover { border-color: var(--teal); }
+  .quiz-option input { margin-top: .2rem; }
+  .quiz-option.correct { border-color: var(--ok); background: var(--ok-soft); }
+  .quiz-option.incorrect { border-color: var(--bad); background: var(--bad-soft); }
+  .quiz-explain { font-size: .8rem; color: var(--ink-faint); font-family: var(--mono); line-height: 1.55; margin: .5rem 0 0; display: none; }
+  .quiz-q.graded .quiz-explain { display: block; }
+  .quiz-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .btn { font-family: var(--sans); font-weight: 700; font-size: .88rem; border: none; border-radius: 8px; padding: .65rem 1.3rem; cursor: pointer; background: var(--accent); color: var(--paper-raised); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .quiz-score { font-family: var(--mono); font-weight: 700; }
+
+  .summary-card { background: var(--teal-soft); border: 1px solid var(--teal); border-radius: var(--radius); padding: 1.5rem 1.6rem; }
+  .summary-card h2 { font-family: var(--serif); margin: 0 0 .8rem; font-size: 1.3rem; color: var(--ink); }
+  .summary-card ul { margin: 0; padding-left: 1.2rem; color: var(--ink-soft); }
+  .summary-card li { margin-bottom: .45rem; }
+
+  .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line-soft); }
+  .pager a { text-decoration: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: .8rem 1.1rem; flex: 1 1 0; }
+  .pager a:hover { border-color: var(--accent); }
+  .pager .dir { display: block; font-family: var(--mono); font-size: .66rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .25rem; }
+  .pager .next { text-align: right; }
+  footer.site-footer { text-align: center; padding: 2rem; color: var(--ink-faint); font-size: .82rem; font-family: var(--mono); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">The RAG Line</span>
+      <span class="brand-sub">Stop 3 of 5</span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html">Map</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">&#9789;</button>
+    </nav>
+  </header>
+  <div class="progress-rail"><div class="progress-fill" style="width:50%"></div></div>
+
+  <main>
+    <p class="kicker">Commit 3 &middot; rag.py (embeddings + FAISS)</p>
+    <h1 class="page-title">Embedding + Vector Store</h1>
+    <p class="page-dek">Chunks are still just text. This stop turns each one into a vector — a point in
+      space — and builds an index that can find the nearest points to any question, instantly.</p>
+
+    <div class="transit-wrap">
+      <div class="transit" role="img" aria-label="Pipeline map, Embedding and FAISS are highlighted as active stations">
+        <div class="track"></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Depot</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">PDF</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Loader</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Splitter</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">Embedding</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">FAISS</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Retriever</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Prompt</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">LLM</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Answer</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">UI</div></div>
+      </div>
+      <p class="map-caption">You are here: <strong>Embedding &rarr; FAISS</strong></p>
+    </div>
+
+    <section class="section">
+      <p class="section-eyebrow">Concept</p>
+      <h2>Two separate jobs: what to compare, and how to compare fast</h2>
+      <div class="prose">
+        <p>Think of a librarian who has skimmed every chunk in the document and roughly remembers what
+          each one is about. Ask a question, and instead of you reading every chunk yourself, the
+          librarian instantly points you to the ones that are actually relevant — even if your question
+          doesn't use the same words as the text. That's what this stop builds, in two steps.</p>
+      </div>
+
+      <div class="step-flow">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>Turn text into numbers</h3>
+            <p>An embedding model reads a chunk and turns it into 384 numbers describing what it means.
+              Two chunks about the same idea end up with similar numbers, even with zero words in
+              common — that's what lets <em>"forecast error was 3.2%"</em> match a question about
+              <em>"accuracy"</em> with no keyword overlap at all.</p>
+            <div class="vecwrap" aria-hidden="true">
+              <div class="vecdot"></div><div class="vecdot"></div><div class="vecdot hot"></div><div class="vecdot"></div>
+              <div class="vecdot"></div><div class="vecdot hot"></div><div class="vecdot"></div><div class="vecdot"></div>
+              <div class="vecdot hot"></div><div class="vecdot"></div><div class="vecdot"></div><div class="vecdot"></div>
+            </div>
+          </div>
+        </div>
+        <div class="step-arrow" aria-hidden="true">&darr;</div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>Find the closest numbers, fast</h3>
+            <p>A question gets turned into 384 numbers the same way. FAISS's job is to instantly find
+              which chunks' numbers sit closest to the question's. Checking a handful of chunks by hand
+              would be fine — checking thousands one by one isn't — so FAISS builds a structure that
+              skips straight to the nearest matches.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prose">
+        <p>This project makes two specific, deliberate choices here: embeddings run locally with
+          <code>sentence-transformers/all-MiniLM-L6-v2</code> (free, no API key, nothing leaves your
+          machine), and FAISS runs as an in-process library rather than a hosted database. Both trade a
+          little quality and scale for zero-cost, zero-setup — the right call for a project anyone
+          should be able to clone and run for free. The index is cached to disk with
+          <code>save_local()</code>, so it's only built once: every app launch after the first loads the
+          cache instead of re-embedding the whole PDF.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Architecture</p>
+      <h2>Build once, reuse forever</h2>
+      <div class="arch">
+        <div class="arch-node accent"><span class="t">from stop 2</span>chunks</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">local model</span>HuggingFaceEmbeddings</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node teal"><span class="t">FAISS.from_documents</span>vector index</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">save_local()</span>vectorstore/ on disk</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Code</p>
+      <h2>rag.py &mdash; embeddings and storage</h2>
+      <div class="codeblock">
+        <div class="codeblock-head"><span>rag.py (part 1)</span><span>Python</span></div>
+        <pre><code data-lang="python">def get_embeddings() -> HuggingFaceEmbeddings:
+    """Load the local sentence-transformers embedding model."""
+    return HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL_NAME)
+
+
+def build_vectorstore(pdf_path: Path = config.DEFAULT_PDF_PATH) -> FAISS:
+    """Build a fresh FAISS index in memory from the source PDF."""
+    chunks = load_and_split(pdf_path)
+    embeddings = get_embeddings()
+    return FAISS.from_documents(chunks, embeddings)
+
+
+def save_vectorstore(vectorstore: FAISS, path: Path = config.VECTORSTORE_DIR) -> None:
+    """Persist a FAISS index to disk so it doesn't need to be rebuilt."""
+    path.mkdir(parents=True, exist_ok=True)
+    vectorstore.save_local(str(path))
+
+
+def load_vectorstore(path: Path = config.VECTORSTORE_DIR) -> FAISS:
+    """Load a previously saved FAISS index from disk."""
+    embeddings = get_embeddings()
+    return FAISS.load_local(
+        str(path), embeddings, allow_dangerous_deserialization=True
+    )
+
+
+def get_or_build_vectorstore(
+    pdf_path: Path = config.DEFAULT_PDF_PATH,
+    vectorstore_path: Path = config.VECTORSTORE_DIR,
+) -> FAISS:
+    """Load a cached index if one exists; otherwise build and cache one."""
+    index_file = vectorstore_path / "index.faiss"
+    if index_file.exists():
+        return load_vectorstore(vectorstore_path)
+    vectorstore = build_vectorstore(pdf_path)
+    save_vectorstore(vectorstore, vectorstore_path)
+    return vectorstore</code></pre>
+      </div>
+      <div class="annot">
+        <p><code>allow_dangerous_deserialization=True</code> is required because a FAISS index loads via
+          pickle. It's safe here because the only index ever loaded is one this project itself created —
+          never load a FAISS index you didn't build or don't trust.</p>
+        <p><code>get_or_build_vectorstore()</code> is the function everything else actually calls.
+          Embedding a PDF is the slowest step in the whole pipeline; checking for
+          <code>index.faiss</code> first is what makes every app launch after the first one instant.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">For beginners</p>
+      <div class="callouts">
+        <div class="callout callout--beginner">
+          <h3>Why this vector store, and what else fits?</h3>
+          <p>FAISS is a <em>library</em>, not a server — it runs inside your Python process and saves to
+            a folder on disk. That's perfect for one person, one document, running locally: no server to
+            host, no account to create. It starts to fall short once you need things a database gives
+            you for free — multiple people writing at once, deleting/updating individual chunks without
+            rebuilding the whole index, or running across many machines.</p>
+          <table class="alt-table">
+            <tr><th>Option</th><th>Use it when</th></tr>
+            <tr><td><strong>FAISS</strong> — used in this project</td><td>One person, one document, running locally — no server to host, no account to create.</td></tr>
+            <tr><td><strong>Chroma</strong></td><td>You want something almost as simple as FAISS but with easier add/update/delete of individual chunks.</td></tr>
+            <tr><td><strong>Pinecone / Weaviate / Qdrant</strong></td><td>You need a hosted, managed vector store — multiple users, production scale, no server ops.</td></tr>
+            <tr><td><strong>pgvector</strong></td><td>You already run Postgres and want vectors alongside your normal relational data.</td></tr>
+          </table>
+        </div>
+        <div class="callout callout--beginner">
+          <h3>Why this embedding model, and what else fits?</h3>
+          <p>Every embedding model makes the same underlying trade: where it runs, versus what it costs
+            and how good the vectors are. A model that runs on your own machine is free and keeps every
+            chunk of your document private — nothing is ever sent anywhere. A hosted embedding API
+            usually produces higher-quality vectors and handles more languages, at the cost of a per-call
+            fee, an API key, and a network round-trip for every chunk you embed. Neither is universally
+            "better" — it depends on whether you're optimizing for zero-cost/zero-setup or for maximum
+            retrieval quality at scale.</p>
+          <table class="alt-table">
+            <tr><th>Provider / model</th><th>Type</th><th>Trade-off</th></tr>
+            <tr><td><strong>sentence-transformers</strong> (e.g. all-MiniLM, BGE, E5, GTE) — used in this project</td><td>Open-weight, self-hosted</td><td>Free, private, runs on your own machine; quality and speed depend on the model size and your hardware</td></tr>
+            <tr><td><strong>OpenAI embeddings</strong></td><td>Hosted API</td><td>Strong general-purpose quality; usage-based cost, needs an API key and internet</td></tr>
+            <tr><td><strong>Cohere embeddings</strong></td><td>Hosted API</td><td>Retrieval-tuned models with strong multilingual support; usage-based cost</td></tr>
+            <tr><td><strong>Voyage AI</strong></td><td>Hosted API</td><td>Built specifically for retrieval/RAG use cases; usage-based cost</td></tr>
+            <tr><td><strong>Google (Vertex AI) embeddings</strong></td><td>Hosted API</td><td>Integrates with the Google Cloud ecosystem; usage-based cost</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Quiz</p>
+      <h2>Check yourself</h2>
+      <div class="quiz">
+        <div class="quiz-q">
+          <p class="q-text">1. Why use a local embedding model instead of a hosted embeddings API?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">Local models are always more accurate.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q1">It's free and requires no API key, so anyone can clone and run the project with zero paid setup.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">FAISS only works with local embeddings.</label>
+          </div>
+          <p class="quiz-explain">The trade-off is explicit: slightly lower quality and slower than a hosted API, in exchange for zero-cost, zero-key setup.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">2. What happens if you query a FAISS index with a different embedding model than the one that built it?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">FAISS raises a clear error immediately.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q2">It runs without error but returns wrong, meaningless neighbors.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">FAISS automatically re-embeds everything.</label>
+          </div>
+          <p class="quiz-explain">FAISS just stores numbers — it has no idea which model produced them, so a mismatch fails silently.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">3. Why cache a vector index to disk instead of rebuilding it from scratch every time the app starts?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">Caching makes the generated answers more accurate.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q3">Embedding a document is the slowest step in the pipeline, so caching turns every startup after the first into an instant load.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">Caching reduces the number of chunks retrieved per query.</label>
+          </div>
+          <p class="quiz-explain">Rebuilding the index means re-embedding every chunk from scratch. Checking for a saved index first is what makes every launch after the first one instant.</p>
+        </div>
+        <div class="quiz-actions">
+          <button class="btn js-check">Check answers</button>
+          <button class="btn secondary js-reset" style="display:none">Try again</button>
+          <span class="quiz-score"></span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="pager">
+      <a href="02-orchestration-framework.html"><span class="dir">&larr; Previous</span>Orchestration framework</a>
+      <a class="next" href="04-retrieval-augmented-generation.html"><span class="dir">Next stop</span>Retrieval-Augmented Generation &rarr;</a>
+    </nav>
+  </main>
+
+  <footer class="site-footer">Stop 3 of 5 &middot; The RAG Line</footer>
+
+  <script>
+    (function() {
+      var root = document.documentElement;
+      var stored = localStorage.getItem('lc-theme');
+      if (stored) root.setAttribute('data-theme', stored);
+      var btn = document.getElementById('themeToggle');
+      function icon() {
+        var mode = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        btn.textContent = mode === 'dark' ? '☀' : '☽';
+      }
+      icon();
+      btn.addEventListener('click', function() {
+        var current = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('lc-theme', next);
+        icon();
+      });
+    })();
+
+    (function() {
+      if (window.location.href.indexOf('/code/artifact/') === -1) return;
+      var ARTIFACT_MAP = {
+        'index.html': 'https://claude.ai/code/artifact/51beb0b3-8622-43d9-9cfb-31177e2934da',
+        '01-project-setup.html': 'https://claude.ai/code/artifact/52066b95-fa68-4e80-b64a-36ecd72ee0d4',
+        '02-orchestration-framework.html': 'https://claude.ai/code/artifact/0c23fd14-d2a0-4d52-a93b-65fe239b0645',
+        '03-embedding-vector-store.html': 'https://claude.ai/code/artifact/f57b24a0-e768-4ec9-b194-469d18536f24',
+        '04-retrieval-augmented-generation.html': 'https://claude.ai/code/artifact/04e3783b-4576-40be-8d0d-0f4c3f59d5f5',
+        '05-ui-framework.html': 'https://claude.ai/code/artifact/de4059dc-974f-45b9-8d63-f46af9db1838'
+      };
+      document.querySelectorAll('a[href]').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (ARTIFACT_MAP[href]) a.setAttribute('href', ARTIFACT_MAP[href]);
+      });
+    })();
+
+    (function() {
+      function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function highlightPython(code) {
+        code = esc(code);
+        var pattern = /(#.*$)|("data"|"vectorstore"|"your-document\.pdf"|"sentence-transformers\/all-MiniLM-L6-v2"|"qwen3"|"http:\/\/localhost:11434")|("""[\s\S]*?"""|'''[\s\S]*?'''|"[^"\n]*"|'[^'\n]*')|(@[A-Za-z_][\w.]*)|\b(\d+\.?\d*)\b|\b(def|class|import|from|return|if|else|elif|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|as|pass|break|continue|lambda|yield|global|nonlocal|assert|del)\b|\b([A-Za-z_]\w*)(?=\()/gm;
+        return code.replace(pattern, function(m, comment, configurable, string, decorator, number, keyword, func) {
+          if (comment) return '<span class="tok-comment">' + comment + '</span>';
+          if (configurable) return '<span class="tok-configurable">' + configurable + '</span>';
+          if (string) return '<span class="tok-string">' + string + '</span>';
+          if (decorator) return '<span class="tok-decorator">' + decorator + '</span>';
+          if (number) return '<span class="tok-number">' + number + '</span>';
+          if (keyword) return '<span class="tok-keyword">' + keyword + '</span>';
+          if (func) return '<span class="tok-function">' + func + '</span>';
+          return m;
+        });
+      }
+      document.querySelectorAll('code[data-lang="python"]').forEach(function(el) {
+        el.innerHTML = highlightPython(el.textContent);
+      });
+    })();
+
+    (function() {
+      document.querySelectorAll('.quiz').forEach(function(quiz) {
+        var checkBtn = quiz.querySelector('.js-check');
+        var resetBtn = quiz.querySelector('.js-reset');
+        var scoreEl = quiz.querySelector('.quiz-score');
+        var questions = quiz.querySelectorAll('.quiz-q');
+        checkBtn.addEventListener('click', function() {
+          var correct = 0;
+          questions.forEach(function(q) {
+            var selected = q.querySelector('input:checked');
+            var options = q.querySelectorAll('.quiz-option');
+            options.forEach(function(opt) {
+              opt.classList.remove('correct', 'incorrect');
+              var isRight = opt.dataset.correct === 'true';
+              if (selected && opt.contains(selected)) {
+                opt.classList.add(isRight ? 'correct' : 'incorrect');
+              } else if (isRight) {
+                opt.classList.add('correct');
+              }
+            });
+            q.classList.add('graded');
+            if (selected && selected.closest('.quiz-option').dataset.correct === 'true') correct++;
+          });
+          scoreEl.textContent = correct + ' / ' + questions.length + ' correct';
+          checkBtn.style.display = 'none';
+          resetBtn.style.display = 'inline-block';
+        });
+        resetBtn.addEventListener('click', function() {
+          questions.forEach(function(q) {
+            q.classList.remove('graded');
+            q.querySelectorAll('.quiz-option').forEach(function(o) { o.classList.remove('correct', 'incorrect'); });
+            q.querySelectorAll('input').forEach(function(i) { i.checked = false; });
+          });
+          scoreEl.textContent = '';
+          checkBtn.style.display = 'inline-block';
+          resetBtn.style.display = 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

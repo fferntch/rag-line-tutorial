@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stop 2: Orchestration Framework — The RAG Line</title>
+<meta name="description" content="Why a framework at all, and how a PDF becomes page-level Documents, then small overlapping chunks ready to embed." />
+<style>
+  :root {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+    --radius: 10px;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+      --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+      --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+      --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+    --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+    --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+    --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"] {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .2s ease, color .2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  a { color: var(--accent-ink, var(--accent)); }
+  a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--teal); outline-offset: 2px;
+  }
+  img, svg { max-width: 100%; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: .85rem 1.5rem; background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: baseline; gap: .6rem; text-decoration: none; color: var(--ink); }
+  .brand-mark { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
+  .brand-sub { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+  .topnav { display: flex; align-items: center; gap: 1.1rem; }
+  .topnav a { color: var(--ink-soft); text-decoration: none; font-size: .86rem; }
+  .topnav a:hover { color: var(--accent); }
+  .theme-toggle {
+    border: 1px solid var(--line); background: var(--paper-raised); color: var(--ink);
+    border-radius: 999px; width: 2.1rem; height: 2.1rem; display: grid; place-items: center;
+    cursor: pointer; font-size: 1rem; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  .progress-rail { height: 3px; background: var(--line-soft); }
+  .progress-fill { height: 100%; background: var(--accent); }
+
+  main { max-width: 920px; margin: 0 auto; padding: 2.6rem 1.5rem 5rem; }
+  .kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--teal); margin: 0 0 .6rem; }
+  h1.page-title { font-family: var(--serif); font-weight: 700; font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.15; margin: 0 0 .5rem; text-wrap: balance; }
+  .page-dek { font-family: var(--serif); color: var(--ink-soft); font-size: 1.15rem; line-height: 1.6; max-width: 62ch; margin: 0 0 2.2rem; }
+
+  .transit-wrap { margin: 0 0 .5rem; }
+  .transit { position: relative; display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 1.6rem .5rem 1.2rem; margin: 0 -.5rem; }
+  .track { position: absolute; left: 2.2rem; right: 2.2rem; top: 2.05rem; height: 3px; background: var(--line); z-index: 0; border-radius: 2px; }
+  .station { position: relative; z-index: 1; flex: 1 0 auto; min-width: 80px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .55rem; padding: 0 .3rem; }
+  .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--paper-raised); border: 3px solid var(--line); }
+  .station-label { font-family: var(--mono); font-size: .64rem; letter-spacing: .01em; color: var(--ink-faint); white-space: nowrap; }
+  .station.done .dot { background: var(--teal); border-color: var(--teal); }
+  .station.done .station-label { color: var(--ink-soft); }
+  .station.active .dot { background: var(--accent); border-color: var(--accent); width: 20px; height: 20px; box-shadow: 0 0 0 5px var(--accent-soft); }
+  .station.active .station-label { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .map-caption { font-family: var(--mono); font-size: .82rem; color: var(--ink-faint); margin: 0 0 3rem; }
+  .map-caption strong { color: var(--accent-ink, var(--accent)); }
+
+  .section { margin: 0 0 3.2rem; }
+  .section-eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; gap: .6rem; margin: 0 0 .7rem; }
+  .section-eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+  .section h2 { font-family: var(--serif); font-size: 1.5rem; margin: 0 0 .9rem; text-wrap: balance; }
+  .prose { max-width: 68ch; font-family: var(--serif); font-size: 1.03rem; line-height: 1.75; }
+  .prose p { margin: 0 0 1.15rem; color: var(--ink-soft); }
+  .prose strong { color: var(--ink); }
+  .prose ul, .prose ol { color: var(--ink-soft); padding-left: 1.3rem; margin: 0 0 1rem; }
+  .prose li { margin: 0 0 .45rem; }
+  .prose code { font-family: var(--mono); background: var(--paper-raised); border: 1px solid var(--line-soft); padding: .1rem .35rem; border-radius: 5px; font-size: .87em; }
+
+  .arch { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.4rem; box-shadow: var(--shadow); overflow-x: auto; }
+  .arch-node { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; font-family: var(--mono); font-size: .8rem; text-align: center; flex: 1 1 120px; min-width: 110px; }
+  .arch-node .t { display: block; font-family: var(--sans); font-size: .66rem; color: var(--ink-faint); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .arch-node.accent { border-color: var(--accent); background: var(--accent-soft); }
+  .arch-node.teal { border-color: var(--teal); background: var(--teal-soft); }
+  .arch-arrow { color: var(--ink-faint); font-size: 1.2rem; flex: 0 0 auto; }
+  @media (max-width: 640px) { .arch { flex-direction: column; align-items: stretch; } .arch-arrow { text-align: center; transform: rotate(90deg); } }
+
+  .callouts { display: grid; gap: 1rem; }
+  .callout { border: 1px solid var(--line-soft); border-left: 4px solid var(--ink-faint); border-radius: 8px; padding: 1rem 1.1rem; background: var(--paper-raised); }
+  .callout h3 { margin: 0 0 .4rem; font-size: .95rem; font-weight: 700; }
+  .callout p, .callout li { margin: 0; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.6; }
+  .callout--note { border-left-color: var(--teal); }
+  .callout--note h3 { color: var(--teal); }
+  .callout--mistake { border-left-color: var(--bad); }
+  .callout--mistake h3 { color: var(--bad); }
+  .callout--beginner { border-left-color: var(--accent); }
+  .callout--beginner h3 { color: var(--accent-ink, var(--accent)); }
+  .callout ul { padding-left: 1.1rem; margin: 0; }
+  .callout li + li { margin-top: .5rem; }
+  .alt-table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .6rem; }
+  .alt-table th, .alt-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-family: var(--serif); }
+  .alt-table th { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+  .example-box { background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.1rem 1.3rem; margin: 1.2rem 0; box-shadow: var(--shadow); font-family: var(--mono); font-size: .84rem; line-height: 1.75; }
+  .example-box .chunk-label { display: block; font-family: var(--sans); font-weight: 700; color: var(--teal); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; margin: 1rem 0 .35rem; }
+  .example-box .chunk-label:first-child { margin-top: 0; }
+  .example-box .overlap { background: var(--accent-soft); color: var(--accent-ink); border-radius: 3px; padding: .05rem .2rem; }
+  .example-caption { font-family: var(--sans); font-size: .82rem; color: var(--ink-faint); margin: .5rem 0 0; }
+
+  .codeblock { border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); margin: 0 0 1rem; }
+  .codeblock-head { display: flex; align-items: center; justify-content: space-between; background: var(--paper-raised); border-bottom: 1px solid var(--line-soft); padding: .55rem .9rem; font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); }
+  .codeblock pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; background: var(--paper-raised); }
+  .codeblock code { font-family: var(--mono); font-size: .8rem; line-height: 1.6; color: var(--ink); white-space: pre; }
+  .annot { margin: .5rem 0 1.6rem; padding-left: 1rem; border-left: 2px solid var(--line-soft); }
+  .annot p { margin: 0 0 .6rem; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.65; }
+  .annot code { font-family: var(--mono); background: var(--paper); border: 1px solid var(--line-soft); padding: .05rem .3rem; border-radius: 4px; font-size: .85em; }
+
+  .tok-keyword { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .tok-string { color: var(--teal); }
+  .tok-comment { color: var(--ink-faint); font-style: italic; }
+  .tok-number { color: var(--teal); }
+  .tok-function { color: var(--ink); font-weight: 700; }
+  .tok-decorator { color: var(--accent-ink, var(--accent)); }
+  .tok-configurable { color: var(--wine); font-weight: 700; }
+
+  .qa-item { border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: .6rem; background: var(--paper-raised); overflow: hidden; }
+  .qa-item summary { cursor: pointer; padding: .85rem 1rem; font-weight: 600; font-size: .88rem; font-family: var(--mono); list-style: none; display: flex; align-items: center; gap: .7rem; }
+  .qa-item summary::-webkit-details-marker { display: none; }
+  .qa-item summary::before { content: "+"; font-family: var(--mono); color: var(--accent); font-size: 1rem; flex: 0 0 auto; width: 1rem; }
+  .qa-item[open] summary::before { content: "\2212"; }
+  .qa-item .qa-body { padding: 0 1rem 1rem 2.7rem; color: var(--ink-soft); font-size: .85rem; font-family: var(--mono); line-height: 1.6; }
+
+  .quiz { background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.6rem; box-shadow: var(--shadow); }
+  .quiz-q { margin-bottom: 1.6rem; }
+  .quiz-q p.q-text { font-weight: 700; margin: 0 0 .7rem; font-family: var(--mono); font-size: .9rem; }
+  .quiz-options { display: grid; gap: .5rem; }
+  .quiz-option { display: flex; align-items: flex-start; gap: .6rem; border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; cursor: pointer; font-size: .85rem; font-family: var(--mono); background: var(--paper); }
+  .quiz-option:hover { border-color: var(--teal); }
+  .quiz-option input { margin-top: .2rem; }
+  .quiz-option.correct { border-color: var(--ok); background: var(--ok-soft); }
+  .quiz-option.incorrect { border-color: var(--bad); background: var(--bad-soft); }
+  .quiz-explain { font-size: .8rem; color: var(--ink-faint); font-family: var(--mono); line-height: 1.55; margin: .5rem 0 0; display: none; }
+  .quiz-q.graded .quiz-explain { display: block; }
+  .quiz-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .btn { font-family: var(--sans); font-weight: 700; font-size: .88rem; border: none; border-radius: 8px; padding: .65rem 1.3rem; cursor: pointer; background: var(--accent); color: var(--paper-raised); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .quiz-score { font-family: var(--mono); font-weight: 700; }
+
+  .summary-card { background: var(--teal-soft); border: 1px solid var(--teal); border-radius: var(--radius); padding: 1.5rem 1.6rem; }
+  .summary-card h2 { font-family: var(--serif); margin: 0 0 .8rem; font-size: 1.3rem; color: var(--ink); }
+  .summary-card ul { margin: 0; padding-left: 1.2rem; color: var(--ink-soft); }
+  .summary-card li { margin-bottom: .45rem; }
+
+  .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line-soft); }
+  .pager a { text-decoration: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: .8rem 1.1rem; flex: 1 1 0; }
+  .pager a:hover { border-color: var(--accent); }
+  .pager .dir { display: block; font-family: var(--mono); font-size: .66rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .25rem; }
+  .pager .next { text-align: right; }
+  footer.site-footer { text-align: center; padding: 2rem; color: var(--ink-faint); font-size: .82rem; font-family: var(--mono); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">The RAG Line</span>
+      <span class="brand-sub">Stop 2 of 5</span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html">Map</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">&#9789;</button>
+    </nav>
+  </header>
+  <div class="progress-rail"><div class="progress-fill" style="width:30%"></div></div>
+
+  <main>
+    <p class="kicker">Commit 2 &middot; LangChain &middot; loader.py &middot; preprocessing &middot; splitter</p>
+    <h1 class="page-title">Orchestration framework</h1>
+    <p class="page-dek">This is where LangChain earns its place — a framework for building LLM-powered
+      applications — turning a PDF, one big page-shaped blob, into small, focused, overlapping chunks:
+      the actual unit everything downstream operates on.</p>
+
+    <div class="transit-wrap">
+      <div class="transit" role="img" aria-label="Pipeline map, PDF Loader and Splitter are highlighted as active stations, Depot is already covered">
+        <div class="track"></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Depot</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">PDF</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">Loader</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">Splitter</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Embedding</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">FAISS</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Retriever</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Prompt</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">LLM</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">Answer</div></div>
+        <div class="station"><div class="dot"></div><div class="station-label">UI</div></div>
+      </div>
+      <p class="map-caption">You are here: <strong>PDF &rarr; Loader &rarr; Splitter</strong></p>
+    </div>
+
+    <section class="section">
+      <p class="section-eyebrow">Concept</p>
+      <h2>From raw PDF to chunks, in three steps</h2>
+      <div class="prose">
+        <p>A whole PDF page is usually too big and too topically mixed to be a good unit of retrieval —
+          if a page covers three different subtopics, a question about one of them still pulls in the
+          other two as noise. Getting from a raw PDF to something retrieval can actually use covers three
+          concepts:</p>
+        <ol>
+          <li><strong>Document loading</strong> — <code>PyPDFLoader</code> opens the PDF and reads it
+            page by page.</li>
+          <li><strong>Preprocessing</strong> — each page's raw content gets extracted into plain text,
+            with page number and source path attached as metadata. This happens automatically inside
+            <code>PyPDFLoader.load()</code> — there's no separate preprocessing function in this project,
+            but it's worth naming as its own concept, since not every loader does it cleanly (some leave
+            you with garbled text from scanned PDFs or complex layouts — see the loader comparison
+            below). The result is one <code>Document</code> per page: a simple LangChain object with just
+            two parts, <code>page_content</code> (the page's text) and <code>metadata</code> (the dict
+            holding source path and page number) — that's the entire shape of the object passing through
+            this stop.</li>
+          <li><strong>Text chunking</strong> — <code>RecursiveCharacterTextSplitter</code> breaks each
+            page's <code>Document</code> into several smaller ones: ~1000-character chunks with 200
+            characters of overlap, preferring to cut on paragraph or sentence boundaries rather than
+            mid-word.</li>
+        </ol>
+        <p>The overlap matters: without it, a sentence that happens to fall right on a chunk boundary
+          gets split in half, and half a sentence embeds and retrieves worse than a whole one. Repeating
+          the last 200 characters of one chunk at the start of the next means that boundary sentence
+          almost always survives intact in at least one of the two chunks.</p>
+      </div>
+      <div class="example-box">
+        <span class="chunk-label">Chunk A — characters 1–1000</span>...forecast error across models. ARIMA achieved a MAPE of 4.1%, while LSTM <span class="overlap">reduced error to 3.2% under the same test conditions, outperforming the ensemble baseline</span>.
+        <span class="chunk-label">Chunk B — characters 800–1800</span><span class="overlap">reduced error to 3.2% under the same test conditions, outperforming the ensemble baseline</span>. The hybrid model combined both approaches and pushed accuracy even further...
+      </div>
+      <p class="example-caption">The highlighted sentence sits right on the boundary between the two chunks — the ~200-character overlap is what keeps it whole in both.</p>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Architecture</p>
+      <h2>Inside loader.py</h2>
+      <div class="arch">
+        <div class="arch-node accent"><span class="t">input</span>PDF file</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">PyPDFLoader — load + preprocess</span>load_pdf()</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">1 per page</span>Document[]</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">RecursiveCharacterTextSplitter — chunk</span>split_documents()</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node teal"><span class="t">output</span>chunk Document[]</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Code</p>
+      <h2>loader.py</h2>
+      <div class="codeblock">
+        <div class="codeblock-head"><span>Install</span><span>Shell</span></div>
+        <pre><code>pip install langchain-community langchain-text-splitters pypdf</code></pre>
+      </div>
+      <div class="codeblock">
+        <div class="codeblock-head"><span>loader.py</span><span>Python</span></div>
+        <pre><code data-lang="python">from pathlib import Path
+from typing import List
+
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from config import CHUNK_OVERLAP, CHUNK_SIZE
+
+
+def load_pdf(pdf_path: Path) -> List[Document]:
+    loader = PyPDFLoader(str(pdf_path))
+    return loader.load()
+
+
+def split_documents(documents: List[Document]) -> List[Document]:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    return splitter.split_documents(documents)</code></pre>
+      </div>
+      <div class="annot">
+        <p><code>separators=["\n\n", "\n", ". ", " ", ""]</code> is tried in order — the splitter first
+          tries to cut on paragraph breaks, then line breaks, then sentence ends, then spaces, and only
+          falls back to a hard character cut (<code>""</code>) if nothing else fits within
+          <code>chunk_size</code>. That's why the example above breaks cleanly at a sentence, not
+          mid-word.</p>
+        <p>Each returned chunk keeps the metadata from its parent page <code>Document</code> (source
+          path, page number) — this is exactly what lets the UI later show <em>"page 12"</em> next to a
+          retrieved chunk.</p>
+        <p>This module never touches embeddings or an LLM. Loading and splitting is pure data
+          preparation, which is what makes it independently testable.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">For beginners</p>
+      <div class="callouts">
+        <div class="callout callout--beginner">
+          <h3>Why this orchestration framework, and what else fits?</h3>
+          <p>You could call a model's API directly, load a PDF yourself, and write your own loop to
+            search for relevant text. A framework doesn't do anything you couldn't write by hand — it
+            just gives standard, pre-built pieces (loaders, splitters, vector store wrappers, chains) for
+            steps that almost every RAG project needs, so you're not reinventing PDF parsing or prompt
+            assembly from scratch. The trade-off is an extra dependency to learn and occasional "magic"
+            behind an abstraction — worth it for a first project; some teams later strip it out once
+            they know exactly what they need.</p>
+          <table class="alt-table">
+            <tr><th>Option</th><th>Trade-off</th></tr>
+            <tr><td><strong>LangChain</strong> — used in this project</td><td>Broadest ecosystem of pre-built loaders, splitters, and chains for RAG-style pipelines; the trade-off above applies directly.</td></tr>
+            <tr><td><strong>LlamaIndex</strong></td><td>Similar idea, more opinionated about indexing/retrieval strategies; common for document-heavy RAG.</td></tr>
+            <tr><td><strong>Haystack</strong></td><td>Similar idea, leans more toward production search/QA pipelines.</td></tr>
+            <tr><td><strong>Raw API calls</strong> (no framework)</td><td>Full control, nothing hidden — but you write PDF parsing, chunking, and prompt assembly yourself.</td></tr>
+          </table>
+        </div>
+        <div class="callout callout--beginner">
+          <h3>Why this document loader, and what else fits?</h3>
+          <p>It's a thin wrapper that's fast, dependency-light, and good enough for text-based PDFs —
+            exactly the kind most technical papers and reports are. It struggles with two things:
+            PDFs that are actually scanned images (no real text layer, needs OCR first) and PDFs with
+            complex tables, where text can extract in a jumbled reading order.</p>
+          <table class="alt-table">
+            <tr><th>Option</th><th>Trade-off / when to use it</th></tr>
+            <tr><td><strong>PyPDFLoader</strong> — used in this project</td><td>Thin wrapper, fast, dependency-light, good enough for text-based PDFs.</td></tr>
+            <tr><td><strong>PyMuPDF (fitz)</strong></td><td>Faster extraction, better handling of tricky layouts.</td></tr>
+            <tr><td><strong>pdfplumber</strong></td><td>The PDF has tables you need extracted as structured data, not just flat text.</td></tr>
+            <tr><td><strong>Unstructured / OCR loaders</strong></td><td>The PDF is scanned images rather than real text.</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Quiz</p>
+      <h2>Check yourself</h2>
+      <div class="quiz">
+        <div class="quiz-q">
+          <p class="q-text">1. What is a "chunk," and why is it usually smaller than a full page?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">A chunk is just another name for a whole document.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q1">A chunk is a smaller, focused piece of text, sized to stay topically narrow and fit within the embedding model's limits.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">A chunk is a compressed copy of the PDF's raw file bytes.</label>
+          </div>
+          <p class="quiz-explain">Smaller, focused chunks retrieve more precisely — a whole page mixing several topics pulls in noise along with the relevant part.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">2. Why split text into overlapping chunks instead of clean, non-overlapping ones?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">Overlap makes the vector index smaller.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q2">Without overlap, a sentence sitting right on the boundary gets cut in half and loses meaning in both pieces.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">Overlap is only needed for scanned PDFs.</label>
+          </div>
+          <p class="quiz-explain">Repeating the tail of one chunk at the start of the next means a boundary sentence almost always survives intact in at least one of the two.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">3. What's the risk of setting the overlap too close to (or larger than) the chunk size itself?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q3">Each new chunk mostly repeats the previous one, so splitting can't make meaningful forward progress.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">Nothing changes — overlap size has no real effect.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">The PDF loader silently skips affected pages.</label>
+          </div>
+          <p class="quiz-explain">Overlap has to be meaningfully smaller than the chunk size, or you end up with near-duplicate chunks instead of genuine coverage of the document.</p>
+        </div>
+        <div class="quiz-actions">
+          <button class="btn js-check">Check answers</button>
+          <button class="btn secondary js-reset" style="display:none">Try again</button>
+          <span class="quiz-score"></span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="pager">
+      <a href="01-project-setup.html"><span class="dir">&larr; Previous</span>Project Initialization</a>
+      <a class="next" href="03-embedding-vector-store.html"><span class="dir">Next stop</span>Embedding + Vector Store &rarr;</a>
+    </nav>
+  </main>
+
+  <footer class="site-footer">Stop 2 of 5 &middot; The RAG Line</footer>
+
+  <script>
+    (function() {
+      var root = document.documentElement;
+      var stored = localStorage.getItem('lc-theme');
+      if (stored) root.setAttribute('data-theme', stored);
+      var btn = document.getElementById('themeToggle');
+      function icon() {
+        var mode = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        btn.textContent = mode === 'dark' ? '☀' : '☽';
+      }
+      icon();
+      btn.addEventListener('click', function() {
+        var current = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('lc-theme', next);
+        icon();
+      });
+    })();
+
+    (function() {
+      if (window.location.href.indexOf('/code/artifact/') === -1) return;
+      var ARTIFACT_MAP = {
+        'index.html': 'https://claude.ai/code/artifact/51beb0b3-8622-43d9-9cfb-31177e2934da',
+        '01-project-setup.html': 'https://claude.ai/code/artifact/52066b95-fa68-4e80-b64a-36ecd72ee0d4',
+        '02-orchestration-framework.html': 'https://claude.ai/code/artifact/0c23fd14-d2a0-4d52-a93b-65fe239b0645',
+        '03-embedding-vector-store.html': 'https://claude.ai/code/artifact/f57b24a0-e768-4ec9-b194-469d18536f24',
+        '04-retrieval-augmented-generation.html': 'https://claude.ai/code/artifact/04e3783b-4576-40be-8d0d-0f4c3f59d5f5',
+        '05-ui-framework.html': 'https://claude.ai/code/artifact/de4059dc-974f-45b9-8d63-f46af9db1838'
+      };
+      document.querySelectorAll('a[href]').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (ARTIFACT_MAP[href]) a.setAttribute('href', ARTIFACT_MAP[href]);
+      });
+    })();
+
+    (function() {
+      function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function highlightPython(code) {
+        code = esc(code);
+        var pattern = /(#.*$)|("data"|"vectorstore"|"your-document\.pdf"|"sentence-transformers\/all-MiniLM-L6-v2"|"qwen3"|"http:\/\/localhost:11434")|("""[\s\S]*?"""|'''[\s\S]*?'''|"[^"\n]*"|'[^'\n]*')|(@[A-Za-z_][\w.]*)|\b(\d+\.?\d*)\b|\b(def|class|import|from|return|if|else|elif|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|as|pass|break|continue|lambda|yield|global|nonlocal|assert|del)\b|\b([A-Za-z_]\w*)(?=\()/gm;
+        return code.replace(pattern, function(m, comment, configurable, string, decorator, number, keyword, func) {
+          if (comment) return '<span class="tok-comment">' + comment + '</span>';
+          if (configurable) return '<span class="tok-configurable">' + configurable + '</span>';
+          if (string) return '<span class="tok-string">' + string + '</span>';
+          if (decorator) return '<span class="tok-decorator">' + decorator + '</span>';
+          if (number) return '<span class="tok-number">' + number + '</span>';
+          if (keyword) return '<span class="tok-keyword">' + keyword + '</span>';
+          if (func) return '<span class="tok-function">' + func + '</span>';
+          return m;
+        });
+      }
+      document.querySelectorAll('code[data-lang="python"]').forEach(function(el) {
+        el.innerHTML = highlightPython(el.textContent);
+      });
+    })();
+
+    (function() {
+      document.querySelectorAll('.quiz').forEach(function(quiz) {
+        var checkBtn = quiz.querySelector('.js-check');
+        var resetBtn = quiz.querySelector('.js-reset');
+        var scoreEl = quiz.querySelector('.quiz-score');
+        var questions = quiz.querySelectorAll('.quiz-q');
+        checkBtn.addEventListener('click', function() {
+          var correct = 0;
+          questions.forEach(function(q) {
+            var selected = q.querySelector('input:checked');
+            var options = q.querySelectorAll('.quiz-option');
+            options.forEach(function(opt) {
+              opt.classList.remove('correct', 'incorrect');
+              var isRight = opt.dataset.correct === 'true';
+              if (selected && opt.contains(selected)) {
+                opt.classList.add(isRight ? 'correct' : 'incorrect');
+              } else if (isRight) {
+                opt.classList.add('correct');
+              }
+            });
+            q.classList.add('graded');
+            if (selected && selected.closest('.quiz-option').dataset.correct === 'true') correct++;
+          });
+          scoreEl.textContent = correct + ' / ' + questions.length + ' correct';
+          checkBtn.style.display = 'none';
+          resetBtn.style.display = 'inline-block';
+        });
+        resetBtn.addEventListener('click', function() {
+          questions.forEach(function(q) {
+            q.classList.remove('graded');
+            q.querySelectorAll('.quiz-option').forEach(function(o) { o.classList.remove('correct', 'incorrect'); });
+            q.querySelectorAll('input').forEach(function(i) { i.checked = false; });
+          });
+          scoreEl.textContent = '';
+          checkBtn.style.display = 'inline-block';
+          resetBtn.style.display = 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stop 5: UI Framework — The RAG Line</title>
+<meta name="description" content="How the pipeline becomes something a person can click through and verify." />
+<style>
+  :root {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+    --radius: 10px;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+      --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+      --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+      --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+    --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+    --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+    --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17; --wine: #e2909c;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"] {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb; --wine: #8a3040;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .2s ease, color .2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  a { color: var(--accent-ink, var(--accent)); }
+  a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--teal); outline-offset: 2px;
+  }
+  img, svg { max-width: 100%; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: .85rem 1.5rem; background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: baseline; gap: .6rem; text-decoration: none; color: var(--ink); }
+  .brand-mark { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
+  .brand-sub { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+  .topnav { display: flex; align-items: center; gap: 1.1rem; }
+  .topnav a { color: var(--ink-soft); text-decoration: none; font-size: .86rem; }
+  .topnav a:hover { color: var(--accent); }
+  .theme-toggle {
+    border: 1px solid var(--line); background: var(--paper-raised); color: var(--ink);
+    border-radius: 999px; width: 2.1rem; height: 2.1rem; display: grid; place-items: center;
+    cursor: pointer; font-size: 1rem; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  .progress-rail { height: 3px; background: var(--line-soft); }
+  .progress-fill { height: 100%; background: var(--accent); }
+
+  main { max-width: 920px; margin: 0 auto; padding: 2.6rem 1.5rem 5rem; }
+  .kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--teal); margin: 0 0 .6rem; }
+  h1.page-title { font-family: var(--serif); font-weight: 700; font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.15; margin: 0 0 .5rem; text-wrap: balance; }
+  .page-dek { font-family: var(--serif); color: var(--ink-soft); font-size: 1.15rem; line-height: 1.6; max-width: 62ch; margin: 0 0 2.2rem; }
+
+  .transit-wrap { margin: 0 0 .5rem; }
+  .transit { position: relative; display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 1.6rem .5rem 1.2rem; margin: 0 -.5rem; }
+  .track { position: absolute; left: 2.2rem; right: 2.2rem; top: 2.05rem; height: 3px; background: var(--line); z-index: 0; border-radius: 2px; }
+  .station { position: relative; z-index: 1; flex: 1 0 auto; min-width: 80px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .55rem; padding: 0 .3rem; }
+  .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--paper-raised); border: 3px solid var(--line); }
+  .station-label { font-family: var(--mono); font-size: .64rem; letter-spacing: .01em; color: var(--ink-faint); white-space: nowrap; }
+  .station.done .dot { background: var(--teal); border-color: var(--teal); }
+  .station.done .station-label { color: var(--ink-soft); }
+  .station.active .dot { background: var(--accent); border-color: var(--accent); width: 20px; height: 20px; box-shadow: 0 0 0 5px var(--accent-soft); }
+  .station.active .station-label { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .map-caption { font-family: var(--mono); font-size: .82rem; color: var(--ink-faint); margin: 0 0 3rem; }
+  .map-caption strong { color: var(--accent-ink, var(--accent)); }
+
+  .section { margin: 0 0 3.2rem; }
+  .section-eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; gap: .6rem; margin: 0 0 .7rem; }
+  .section-eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+  .section h2 { font-family: var(--serif); font-size: 1.5rem; margin: 0 0 .9rem; text-wrap: balance; }
+  .prose { max-width: 68ch; font-family: var(--serif); font-size: 1.03rem; line-height: 1.75; }
+  .prose p { margin: 0 0 1.15rem; color: var(--ink-soft); }
+  .prose strong { color: var(--ink); }
+  .prose ul, .prose ol { color: var(--ink-soft); padding-left: 1.3rem; margin: 0 0 1rem; }
+  .prose li { margin: 0 0 .45rem; }
+  .prose code { font-family: var(--mono); background: var(--paper-raised); border: 1px solid var(--line-soft); padding: .1rem .35rem; border-radius: 5px; font-size: .87em; }
+
+  .arch { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.4rem; box-shadow: var(--shadow); overflow-x: auto; }
+  .arch-node { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; font-family: var(--mono); font-size: .8rem; text-align: center; flex: 1 1 120px; min-width: 110px; }
+  .arch-node .t { display: block; font-family: var(--sans); font-size: .66rem; color: var(--ink-faint); margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+  .arch-node.accent { border-color: var(--accent); background: var(--accent-soft); }
+  .arch-node.teal { border-color: var(--teal); background: var(--teal-soft); }
+  .arch-arrow { color: var(--ink-faint); font-size: 1.2rem; flex: 0 0 auto; }
+  @media (max-width: 640px) { .arch { flex-direction: column; align-items: stretch; } .arch-arrow { text-align: center; transform: rotate(90deg); } }
+
+  .mockup { background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.3rem 1.4rem; margin: 1rem 0; }
+  .mockup .mtitle { font-weight: 700; margin-bottom: .8rem; }
+  .mockup .minput { border: 1px solid var(--line); border-radius: 6px; padding: .5rem .7rem; color: var(--ink-faint); font-size: .88rem; margin-bottom: 1rem; }
+  .mockup .mans { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--teal); margin-bottom: .3rem; font-family: var(--mono); }
+  .mockup .mbody { font-size: .9rem; color: var(--ink-soft); margin-bottom: 1rem; }
+  .mockup .mchunk { border: 1px solid var(--line-soft); border-radius: 6px; padding: .5rem .7rem; font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); display: flex; justify-content: space-between; }
+
+  .callouts { display: grid; gap: 1rem; }
+  .callout { border: 1px solid var(--line-soft); border-left: 4px solid var(--ink-faint); border-radius: 8px; padding: 1rem 1.1rem; background: var(--paper-raised); }
+  .callout h3 { margin: 0 0 .4rem; font-size: .95rem; font-weight: 700; }
+  .callout p, .callout li { margin: 0; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.6; }
+  .callout--note { border-left-color: var(--teal); }
+  .callout--note h3 { color: var(--teal); }
+  .callout--mistake { border-left-color: var(--bad); }
+  .callout--mistake h3 { color: var(--bad); }
+  .callout--beginner { border-left-color: var(--accent); }
+  .callout--beginner h3 { color: var(--accent-ink, var(--accent)); }
+  .callout ul { padding-left: 1.1rem; margin: 0; }
+  .callout li + li { margin-top: .5rem; }
+  .alt-table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .6rem; }
+  .alt-table th, .alt-table td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-family: var(--serif); }
+  .alt-table th { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+
+  .codeblock { border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); margin: 0 0 1rem; }
+  .codeblock-head { display: flex; align-items: center; justify-content: space-between; background: var(--paper-raised); border-bottom: 1px solid var(--line-soft); padding: .55rem .9rem; font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); }
+  .codeblock pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; background: var(--paper-raised); }
+  .codeblock code { font-family: var(--mono); font-size: .8rem; line-height: 1.6; color: var(--ink); white-space: pre; }
+  .annot { margin: .5rem 0 1.6rem; padding-left: 1rem; border-left: 2px solid var(--line-soft); }
+  .annot p { margin: 0 0 .6rem; color: var(--ink-soft); font-size: .95rem; font-family: var(--serif); line-height: 1.65; }
+  .annot code { font-family: var(--mono); background: var(--paper); border: 1px solid var(--line-soft); padding: .05rem .3rem; border-radius: 4px; font-size: .85em; }
+
+  .tok-keyword { color: var(--accent-ink, var(--accent)); font-weight: 700; }
+  .tok-string { color: var(--teal); }
+  .tok-comment { color: var(--ink-faint); font-style: italic; }
+  .tok-number { color: var(--teal); }
+  .tok-function { color: var(--ink); font-weight: 700; }
+  .tok-decorator { color: var(--accent-ink, var(--accent)); }
+  .tok-configurable { color: var(--wine); font-weight: 700; }
+
+  .qa-item { border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: .6rem; background: var(--paper-raised); overflow: hidden; }
+  .qa-item summary { cursor: pointer; padding: .85rem 1rem; font-weight: 600; font-size: .88rem; font-family: var(--mono); list-style: none; display: flex; align-items: center; gap: .7rem; }
+  .qa-item summary::-webkit-details-marker { display: none; }
+  .qa-item summary::before { content: "+"; font-family: var(--mono); color: var(--accent); font-size: 1rem; flex: 0 0 auto; width: 1rem; }
+  .qa-item[open] summary::before { content: "\2212"; }
+  .qa-item .qa-body { padding: 0 1rem 1rem 2.7rem; color: var(--ink-soft); font-size: .85rem; font-family: var(--mono); line-height: 1.6; }
+
+  .quiz { background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 1.6rem; box-shadow: var(--shadow); }
+  .quiz-q { margin-bottom: 1.6rem; }
+  .quiz-q p.q-text { font-weight: 700; margin: 0 0 .7rem; font-family: var(--mono); font-size: .9rem; }
+  .quiz-options { display: grid; gap: .5rem; }
+  .quiz-option { display: flex; align-items: flex-start; gap: .6rem; border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; cursor: pointer; font-size: .85rem; font-family: var(--mono); background: var(--paper); }
+  .quiz-option:hover { border-color: var(--teal); }
+  .quiz-option input { margin-top: .2rem; }
+  .quiz-option.correct { border-color: var(--ok); background: var(--ok-soft); }
+  .quiz-option.incorrect { border-color: var(--bad); background: var(--bad-soft); }
+  .quiz-explain { font-size: .8rem; color: var(--ink-faint); font-family: var(--mono); line-height: 1.55; margin: .5rem 0 0; display: none; }
+  .quiz-q.graded .quiz-explain { display: block; }
+  .quiz-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .btn { font-family: var(--sans); font-weight: 700; font-size: .88rem; border: none; border-radius: 8px; padding: .65rem 1.3rem; cursor: pointer; background: var(--accent); color: var(--paper-raised); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .quiz-score { font-family: var(--mono); font-weight: 700; }
+
+  .summary-card { background: var(--teal-soft); border: 1px solid var(--teal); border-radius: var(--radius); padding: 1.5rem 1.6rem; }
+  .summary-card h2 { font-family: var(--serif); margin: 0 0 .8rem; font-size: 1.3rem; color: var(--ink); }
+  .summary-card ul { margin: 0; padding-left: 1.2rem; color: var(--ink-soft); }
+  .summary-card li { margin-bottom: .45rem; }
+
+  .finish { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius); padding: 1.6rem; text-align: center; margin-top: 2rem; }
+  .finish h2 { font-family: var(--serif); margin: 0 0 .6rem; }
+  .finish p { color: var(--ink-soft); margin: 0 0 1rem; }
+
+  .pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line-soft); }
+  .pager a { text-decoration: none; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: .8rem 1.1rem; flex: 1 1 0; }
+  .pager a:hover { border-color: var(--accent); }
+  .pager .dir { display: block; font-family: var(--mono); font-size: .66rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .25rem; }
+  .pager .next { text-align: right; }
+  footer.site-footer { text-align: center; padding: 2rem; color: var(--ink-faint); font-size: .82rem; font-family: var(--mono); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">The RAG Line</span>
+      <span class="brand-sub">Stop 5 of 5</span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html">Map</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">&#9789;</button>
+    </nav>
+  </header>
+  <div class="progress-rail"><div class="progress-fill" style="width:100%"></div></div>
+
+  <main>
+    <p class="kicker">Commit 5 &middot; app.py</p>
+    <h1 class="page-title">UI framework</h1>
+    <p class="page-dek">The last stop turns the pipeline into a product: something a person can type a
+      question into and get back a cited, verifiable answer.</p>
+
+    <div class="transit-wrap">
+      <div class="transit" role="img" aria-label="Pipeline map, UI is highlighted as the final active station">
+        <div class="track"></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Depot</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">PDF</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Loader</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Splitter</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Embedding</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">FAISS</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Retriever</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Prompt</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">LLM</div></div>
+        <div class="station done"><div class="dot"></div><div class="station-label">Answer</div></div>
+        <div class="station active"><div class="dot"></div><div class="station-label">UI</div></div>
+      </div>
+      <p class="map-caption">You are here: <strong>UI (Display)</strong> — end of the line.</p>
+    </div>
+
+    <section class="section">
+      <p class="section-eyebrow">Concept</p>
+      <h2>The UI is a thin shell, not the pipeline</h2>
+      <div class="prose">
+        <p><code>app.py</code> is the only file that imports Streamlit. It never builds a prompt, calls
+          FAISS, or talks to the LLM directly — it imports the already-finished pipeline from
+          <code>rag.py</code> and <code>config.py</code> and renders it. That separation means the UI
+          layer could be swapped for a CLI, a FastAPI endpoint, or a different frontend without touching
+          a single line of RAG logic.</p>
+        <p>Two Streamlit-specific concerns show up here that don't exist anywhere else in the project:
+          <strong>caching</strong> (Streamlit reruns the entire script on every interaction, so the
+          expensive chain-building step has to be explicitly protected from re-running on every
+          keystroke) and <strong>graceful failure</strong> (a model that isn't running yet should
+          produce a clear in-app message, not a raw Python stack trace).</p>
+      </div>
+      <div class="mockup" aria-hidden="true">
+        <div class="mtitle">&#128196; PDF Q&amp;A &mdash; LangChain + FAISS + local LLM</div>
+        <div class="minput">Ask a question about the document: What forecasting models does the paper compare?</div>
+        <div class="mans">Answer</div>
+        <div class="mbody">The paper compares ARIMA, LSTM, and hybrid ensemble models for short-term energy demand forecasting&hellip;</div>
+        <div class="mans">Source chunks</div>
+        <div class="mchunk"><span>Chunk 1</span><span>page 7</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Architecture</p>
+      <h2>What app.py touches</h2>
+      <div class="arch">
+        <div class="arch-node"><span class="t">user types</span>question</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node accent"><span class="t">cached once</span>load_chain()</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node"><span class="t">rag.py</span>answer_question()</div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-node teal"><span class="t">rendered</span>answer + expandable sources</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Code</p>
+      <h2>app.py</h2>
+      <div class="codeblock">
+        <div class="codeblock-head"><span>app.py</span><span>Python</span></div>
+        <pre><code data-lang="python">st.set_page_config(page_title="PDF Q&amp;A", page_icon="&#128196;")
+st.title("&#128196; PDF Q&amp;A")
+
+@st.cache_resource(show_spinner="Building the index...")
+def load_chain():
+    vectorstore = get_or_build_vectorstore()
+    return build_rag_chain(vectorstore)
+
+ollama_ready, ollama_message = check_ollama_ready()
+if not ollama_ready:
+    st.error(ollama_message)
+    st.stop()
+
+chain = load_chain()
+question = st.text_input("Ask a question about the document:")
+
+if question:
+    with st.spinner("Thinking..."):
+        answer, sources = answer_question(chain, question)
+
+    st.subheader("Answer")
+    st.write(answer)
+
+    st.subheader("Source chunks")
+    for i, doc in enumerate(sources, start=1):
+        page = doc.metadata.get("page", "unknown")
+        with st.expander(f"Chunk {i} &mdash; page {page}"):
+            st.write(doc.page_content)</code></pre>
+      </div>
+      <div class="annot">
+        <p><code>@st.cache_resource</code> is doing real work here: Streamlit reruns the whole script
+          top to bottom on every interaction. Without this decorator, <code>load_chain()</code> — and
+          the potentially slow <code>get_or_build_vectorstore()</code> inside it — would re-run on every
+          single keystroke in the text box.</p>
+        <p>The readiness guard runs <strong>before</strong> <code>load_chain()</code> is called, not
+          after. <code>check_ollama_ready()</code> (introduced in Stop 4) makes one lightweight local
+          call to confirm the model server is up and the model is actually pulled, so a not-yet-running
+          local model produces one clear sentence instead of a connection-error stack trace from deep
+          inside the LLM client.</p>
+        <p>Each source chunk renders inside its own <code>st.expander</code>, labeled with its page
+          number — this is what lets a reader verify the answer against the original document instead of
+          just trusting it.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">For beginners</p>
+      <div class="callouts">
+        <div class="callout callout--beginner">
+          <h3>Why this UI framework, and what else fits?</h3>
+          <p>Streamlit turns a plain Python script into a web app with no HTML, CSS, or JavaScript —
+            <code>st.text_input(...)</code> and <code>st.write(...)</code> above are the entire frontend.
+            That makes it the fastest way to get a usable interface on top of a finished Python pipeline,
+            at the cost of limited control over layout and styling compared to a real frontend
+            framework.</p>
+          <table class="alt-table">
+            <tr><th>Option</th><th>Use it when</th></tr>
+            <tr><td><strong>Streamlit</strong> — used in this project</td><td>You want a usable interface on a finished Python pipeline fast, with no HTML/CSS/JS.</td></tr>
+            <tr><td><strong>Gradio</strong></td><td>Very similar trade-off to Streamlit; common for ML/AI demos specifically.</td></tr>
+            <tr><td><strong>Flask / FastAPI + a frontend</strong></td><td>You need a real API, custom design, or a mobile app to talk to the backend — much more setup, full control.</td></tr>
+            <tr><td><strong>Just a CLI</strong> (<code>input()</code> loop)</td><td>You're the only user and a browser adds nothing — good enough while still developing the pipeline itself.</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-eyebrow">Quiz</p>
+      <h2>Check yourself</h2>
+      <div class="quiz">
+        <div class="quiz-q">
+          <p class="q-text">1. Why check that a required dependency (like a local model server) is ready early and fail with a clear message, instead of letting the app crash deeper in the code?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">It doesn't matter where the check happens.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q1">An early, explicit check turns a confusing internal error into one clear sentence the user can act on.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q1">Web frameworks require all checks to run before any function definitions.</label>
+          </div>
+          <p class="quiz-explain">Checking early turns an opaque connection error buried deep in a library call into one readable sentence for the user.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">2. Why does an app that rebuilds its entire UI on every interaction need to cache expensive setup steps?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">Caching makes the model's answers more accurate.</label>
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q2">Without caching, a slow step like building a vector index would re-run on every single click or keystroke instead of once.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q2">It caches the user's typed question between browser sessions.</label>
+          </div>
+          <p class="quiz-explain">Frameworks like this rerun the whole script on every interaction — without caching, that means rebuilding the whole pipeline every time the user types a single character.</p>
+        </div>
+        <div class="quiz-q">
+          <p class="q-text">3. Why is it good practice to keep the UI layer separate from the retrieval and generation logic?</p>
+          <div class="quiz-options">
+            <label class="quiz-option" data-correct="true"><input type="radio" name="q3">The UI could be swapped for a CLI or API without touching a single line of the underlying pipeline.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">It's required by every UI framework.</label>
+            <label class="quiz-option" data-correct="false"><input type="radio" name="q3">It makes the vector search run faster.</label>
+          </div>
+          <p class="quiz-explain">A thin UI shell over a finished pipeline means the frontend is swappable — a CLI or API frontend could replace it without touching the RAG logic at all.</p>
+        </div>
+        <div class="quiz-actions">
+          <button class="btn js-check">Check answers</button>
+          <button class="btn secondary js-reset" style="display:none">Try again</button>
+          <span class="quiz-score"></span>
+        </div>
+      </div>
+    </section>
+
+    <div class="finish">
+      <h2>End of the line</h2>
+      <p>PDF &rarr; Loader &rarr; Splitter &rarr; Embedding &rarr; FAISS &rarr; Retriever &rarr; Prompt &rarr; LLM &rarr; Answer &rarr; UI. Every stop, covered.</p>
+      <a class="btn" href="index.html" style="text-decoration:none; display:inline-block;">Back to the line map</a>
+    </div>
+
+    <nav class="pager">
+      <a href="04-retrieval-augmented-generation.html"><span class="dir">&larr; Previous</span>Retrieval-Augmented Generation</a>
+      <a class="next" href="index.html"><span class="dir">Finished</span>Line map &rarr;</a>
+    </nav>
+  </main>
+
+  <footer class="site-footer">Stop 5 of 5 &middot; The RAG Line</footer>
+
+  <script>
+    (function() {
+      var root = document.documentElement;
+      var stored = localStorage.getItem('lc-theme');
+      if (stored) root.setAttribute('data-theme', stored);
+      var btn = document.getElementById('themeToggle');
+      function icon() {
+        var mode = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        btn.textContent = mode === 'dark' ? '☀' : '☽';
+      }
+      icon();
+      btn.addEventListener('click', function() {
+        var current = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('lc-theme', next);
+        icon();
+      });
+    })();
+
+    (function() {
+      if (window.location.href.indexOf('/code/artifact/') === -1) return;
+      var ARTIFACT_MAP = {
+        'index.html': 'https://claude.ai/code/artifact/51beb0b3-8622-43d9-9cfb-31177e2934da',
+        '01-project-setup.html': 'https://claude.ai/code/artifact/52066b95-fa68-4e80-b64a-36ecd72ee0d4',
+        '02-orchestration-framework.html': 'https://claude.ai/code/artifact/0c23fd14-d2a0-4d52-a93b-65fe239b0645',
+        '03-embedding-vector-store.html': 'https://claude.ai/code/artifact/f57b24a0-e768-4ec9-b194-469d18536f24',
+        '04-retrieval-augmented-generation.html': 'https://claude.ai/code/artifact/04e3783b-4576-40be-8d0d-0f4c3f59d5f5',
+        '05-ui-framework.html': 'https://claude.ai/code/artifact/de4059dc-974f-45b9-8d63-f46af9db1838'
+      };
+      document.querySelectorAll('a[href]').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (ARTIFACT_MAP[href]) a.setAttribute('href', ARTIFACT_MAP[href]);
+      });
+    })();
+
+    (function() {
+      function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function highlightPython(code) {
+        code = esc(code);
+        var pattern = /(#.*$)|("data"|"vectorstore"|"your-document\.pdf"|"sentence-transformers\/all-MiniLM-L6-v2"|"qwen3"|"http:\/\/localhost:11434")|("""[\s\S]*?"""|'''[\s\S]*?'''|"[^"\n]*"|'[^'\n]*')|(@[A-Za-z_][\w.]*)|\b(\d+\.?\d*)\b|\b(def|class|import|from|return|if|else|elif|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|as|pass|break|continue|lambda|yield|global|nonlocal|assert|del)\b|\b([A-Za-z_]\w*)(?=\()/gm;
+        return code.replace(pattern, function(m, comment, configurable, string, decorator, number, keyword, func) {
+          if (comment) return '<span class="tok-comment">' + comment + '</span>';
+          if (configurable) return '<span class="tok-configurable">' + configurable + '</span>';
+          if (string) return '<span class="tok-string">' + string + '</span>';
+          if (decorator) return '<span class="tok-decorator">' + decorator + '</span>';
+          if (number) return '<span class="tok-number">' + number + '</span>';
+          if (keyword) return '<span class="tok-keyword">' + keyword + '</span>';
+          if (func) return '<span class="tok-function">' + func + '</span>';
+          return m;
+        });
+      }
+      document.querySelectorAll('code[data-lang="python"]').forEach(function(el) {
+        el.innerHTML = highlightPython(el.textContent);
+      });
+    })();
+
+    (function() {
+      document.querySelectorAll('.quiz').forEach(function(quiz) {
+        var checkBtn = quiz.querySelector('.js-check');
+        var resetBtn = quiz.querySelector('.js-reset');
+        var scoreEl = quiz.querySelector('.quiz-score');
+        var questions = quiz.querySelectorAll('.quiz-q');
+        checkBtn.addEventListener('click', function() {
+          var correct = 0;
+          questions.forEach(function(q) {
+            var selected = q.querySelector('input:checked');
+            var options = q.querySelectorAll('.quiz-option');
+            options.forEach(function(opt) {
+              opt.classList.remove('correct', 'incorrect');
+              var isRight = opt.dataset.correct === 'true';
+              if (selected && opt.contains(selected)) {
+                opt.classList.add(isRight ? 'correct' : 'incorrect');
+              } else if (isRight) {
+                opt.classList.add('correct');
+              }
+            });
+            q.classList.add('graded');
+            if (selected && selected.closest('.quiz-option').dataset.correct === 'true') correct++;
+          });
+          scoreEl.textContent = correct + ' / ' + questions.length + ' correct';
+          checkBtn.style.display = 'none';
+          resetBtn.style.display = 'inline-block';
+        });
+        resetBtn.addEventListener('click', function() {
+          questions.forEach(function(q) {
+            q.classList.remove('graded');
+            q.querySelectorAll('.quiz-option').forEach(function(o) { o.classList.remove('correct', 'incorrect'); });
+            q.querySelectorAll('input').forEach(function(i) { i.checked = false; });
+          });
+          scoreEl.textContent = '';
+          checkBtn.style.display = 'inline-block';
+          resetBtn.style.display = 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The RAG Line — LangChain Learning Path</title>
+<meta name="description" content="An interactive stop-by-stop guide to building a Retrieval-Augmented Generation app with LangChain and FAISS." />
+<style>
+  :root {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+    --radius: 10px;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+      --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+      --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+      --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121826; --paper-raised: #1a2233; --ink: #eef1f5; --ink-soft: #b7bfcf;
+    --ink-faint: #838da0; --line: #2b3448; --line-soft: #212a3c; --accent: #e0a83f;
+    --accent-soft: #3a2f18; --accent-ink: #f3cf8a; --teal: #4fb3ae; --teal-soft: #16302e;
+    --ok: #6ec98a; --ok-soft: #16301f; --bad: #e07d70; --bad-soft: #3a1a17;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"] {
+    --paper: #eef1ef; --paper-raised: #ffffff; --ink: #121826; --ink-soft: #3c4658;
+    --ink-faint: #6b7484; --line: #cdd3d0; --line-soft: #dfe3e0; --accent: #c07d2e;
+    --accent-soft: #eddcc0; --accent-ink: #6b4110; --teal: #2f7d78; --teal-soft: #d9ebe9;
+    --ok: #3f7d52; --ok-soft: #dcede1; --bad: #b1453a; --bad-soft: #f5dedb;
+    --shadow: 0 1px 2px rgba(18,24,38,.06), 0 8px 24px rgba(18,24,38,.07);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .2s ease, color .2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  a { color: var(--accent-ink, var(--accent)); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: .85rem 1.5rem; background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: baseline; gap: .6rem; text-decoration: none; color: var(--ink); }
+  .brand-mark { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
+  .brand-sub { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+  .theme-toggle {
+    border: 1px solid var(--line); background: var(--paper-raised); color: var(--ink);
+    border-radius: 999px; width: 2.1rem; height: 2.1rem; display: grid; place-items: center;
+    cursor: pointer; font-size: 1rem; line-height: 1;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  main { max-width: 980px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  .kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--teal); margin: 0 0 .7rem; }
+  h1.page-title { font-family: var(--serif); font-weight: 700; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.12; margin: 0 0 .9rem; text-wrap: balance; }
+  .page-dek { font-family: var(--serif); color: var(--ink-soft); font-size: 1.15rem; line-height: 1.6; max-width: 64ch; margin: 0 0 1.6rem; }
+  .lede { font-family: var(--serif); color: var(--ink-soft); font-size: 1.05rem; line-height: 1.75; max-width: 68ch; margin: 0 0 1rem; }
+
+  .transit { position: relative; display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 1.8rem .5rem 1rem; margin: 0 -.5rem 1rem; }
+  .track { position: absolute; left: 2.2rem; right: 2.2rem; top: 2.25rem; height: 3px; background: var(--line); z-index: 0; border-radius: 2px; }
+  .station { position: relative; z-index: 1; flex: 1 0 auto; min-width: 84px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: .55rem; padding: 0 .3rem; }
+  .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--teal); border: 3px solid var(--teal); }
+  .station-label { font-family: var(--mono); font-size: .66rem; letter-spacing: .02em; color: var(--ink-soft); white-space: nowrap; }
+  .map-caption { font-family: var(--mono); font-size: .8rem; color: var(--ink-faint); margin: 0 0 3rem; }
+
+  .stops { display: grid; gap: 1rem; }
+  .stop-card {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1.1rem;
+    background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius);
+    padding: 1.3rem 1.4rem; text-decoration: none; color: inherit; box-shadow: var(--shadow);
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .stop-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .stop-num { font-family: var(--serif); font-size: 1.7rem; color: var(--accent); font-weight: 700; width: 2.6ch; }
+  .stop-title { font-family: var(--serif); font-weight: 700; font-size: 1.1rem; margin: 0 0 .3rem; }
+  .stop-desc { font-family: var(--serif); color: var(--ink-soft); font-size: .92rem; line-height: 1.5; margin: 0 0 .5rem; }
+  .stop-stations { font-family: var(--mono); font-size: .72rem; color: var(--teal); }
+  .stop-go { font-family: var(--mono); font-size: .8rem; color: var(--ink-faint); white-space: nowrap; }
+  .stop-card:hover .stop-go { color: var(--accent); }
+
+  .about { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--line-soft); }
+  .about h2 { font-family: var(--serif); font-size: 1.4rem; }
+  .about p { font-family: var(--serif); color: var(--ink-soft); font-size: 1rem; line-height: 1.7; max-width: 68ch; }
+  .stack { margin-top: 3rem; }
+  .stack h2 { font-family: var(--serif); font-size: 1.4rem; margin: 0 0 .3rem; }
+  .stack > p { font-family: var(--serif); color: var(--ink-soft); font-size: 1rem; line-height: 1.7; max-width: 68ch; margin: 0 0 1.2rem; }
+  .stack-table { width: 100%; border-collapse: collapse; background: var(--paper-raised); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); font-size: .9rem; }
+  .stack-table th, .stack-table td { text-align: left; padding: .75rem .9rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-family: var(--serif); }
+  .stack-table tr:last-child td { border-bottom: none; }
+  .stack-table th { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; background: var(--paper); }
+  .stack-table td:first-child { font-weight: 700; white-space: nowrap; }
+  .stack-table td.alts { color: var(--teal); }
+  .stack-table + .lede { margin-top: 1.6rem; }
+
+  .explainer { margin: 0 0 3rem; }
+  .explainer .section-eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--teal); margin: 0 0 .5rem; }
+  .explainer h2 { font-family: var(--serif); font-size: 1.7rem; margin: 0 0 1rem; text-wrap: balance; }
+  .rag-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; margin: 1.6rem 0; }
+  .rag-word { background: var(--paper-raised); padding: 1.1rem 1.2rem; }
+  .rag-word .w { display: block; font-family: var(--serif); font-weight: 700; color: var(--accent-ink, var(--accent)); font-size: 1.05rem; margin-bottom: .35rem; }
+  .rag-word .d { display: block; font-family: var(--serif); color: var(--ink-soft); font-size: .88rem; line-height: 1.5; }
+  .rag-analogy { border-left: 4px solid var(--teal); background: var(--teal-soft); border-radius: 8px; padding: 1.1rem 1.3rem; margin: 1.6rem 0; }
+  .rag-analogy p { font-family: var(--serif); color: var(--ink); font-size: 1rem; line-height: 1.7; margin: 0; }
+  @media (max-width: 640px) { .rag-words { grid-template-columns: 1fr; } }
+  footer.site-footer { text-align: center; padding: 2rem; color: var(--ink-faint); font-size: .82rem; font-family: var(--mono); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">The RAG Line</span>
+      <span class="brand-sub">LangChain Learning Path</span>
+    </a>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">&#9789;</button>
+  </header>
+
+  <main>
+    <p class="kicker">PDF Q&amp;A &middot; Framework + Vector Store + LLM Runner + Models</p>
+    <h1 class="page-title">Every stage of the pipeline, as a line you can ride stop by stop.</h1>
+    <p class="page-dek">
+      This project turns a PDF into a question-answering app that only answers from what's actually in
+      the document. If you already know what RAG is, jump straight to the map below. If you don't —
+      start here.
+    </p>
+
+    <section class="explainer">
+      <p class="section-eyebrow">Before the map</p>
+      <h2>What "RAG" actually means</h2>
+      <p class="lede">
+        A chat model is trained once, on a fixed pile of text, and then frozen. Ask it about a PDF
+        sitting on your laptop — a paper, a contract, a manual — and it has never seen that specific
+        document. It also can't just read the whole thing before every reply: documents are long, and
+        stuffing an entire PDF into every question is slow and, past a certain length, doesn't even fit.
+      </p>
+      <p class="lede">
+        Retrieval-Augmented Generation solves this with one trick: instead of asking the model to answer
+        from memory, first find the handful of paragraphs that are actually relevant to <em>this</em>
+        question, and only show the model those. The name describes the trick literally:
+      </p>
+
+      <div class="rag-words">
+        <div class="rag-word"><span class="w">Retrieval</span><span class="d">Search the document for the small number of chunks most relevant to the question being asked.</span></div>
+        <div class="rag-word"><span class="w">Augmented</span><span class="d">Add those chunks into the prompt, alongside the question, before sending anything to the model.</span></div>
+        <div class="rag-word"><span class="w">Generation</span><span class="d">The model writes an answer using the chunks it was handed — not from memory.</span></div>
+      </div>
+
+      <div class="rag-analogy">
+        <p>
+          Think closed-book exam versus open-book. A model with no retrieval answers from memory — it
+          either knows the fact or it doesn't, and sometimes it guesses and is wrong with total
+          confidence. A RAG pipeline hands it the exact right page first, open to the right paragraph,
+          then asks the question. The model still does the reasoning; it's just reasoning over real
+          text instead of a half-remembered guess.
+        </p>
+      </div>
+
+      <p class="lede">
+        In practice, that means every question makes two trips: a <strong>retrieval trip</strong>, which
+        searches the document for the closest-matching pieces, and a <strong>generation trip</strong>,
+        which hands those pieces to a chat model and asks it to answer using only what it was given.
+        Everything below — 11 stations, 5 stops — is that two-trip process broken open and drawn as a
+        line you can walk stop by stop.
+      </p>
+    </section>
+
+    <section class="explainer">
+      <p class="section-eyebrow">What we need to build RAG</p>
+      <h2>Core Components</h2>
+      <table class="stack-table">
+        <tr><th>Component</th><th>What it does</th><th>Covered in</th></tr>
+        <tr><td>Document loaders</td><td>Read a source document into a standard format the rest of the pipeline can work with.</td><td>Stop 2</td></tr>
+        <tr><td>Text splitters</td><td>Break a loaded document into small, focused chunks sized to fit an embedding model.</td><td>Stop 2</td></tr>
+        <tr><td>Embeddings</td><td>Turn each chunk into a vector — numbers positioned so similar meaning sits close together.</td><td>Stop 3</td></tr>
+        <tr><td>Vector stores</td><td>Store those vectors and search them for the ones closest to a given question.</td><td>Stop 3</td></tr>
+        <tr><td>Retrievers</td><td>Wrap a vector store's search behind a standard interface: question in, top-k chunks out.</td><td>Stop 4</td></tr>
+        <tr><td>LLMs</td><td>Read the retrieved chunks plus the question, and generate an answer grounded in what it was given.</td><td>Stop 4</td></tr>
+        <tr><td>Evaluation</td><td>Measure whether retrieval found the right chunks and whether the answer is actually correct.</td><td>Not built in this project — a natural next step</td></tr>
+      </table>
+      <p class="lede">
+        This project builds all seven pieces with LangChain — a framework that ships pre-built, standard
+        implementations of each one (loaders, splitters, embedding wrappers, vector store wrappers,
+        retrievers, chat model clients), so you're wiring components together instead of writing PDF
+        parsing or prompt-stuffing from scratch. It's one way to build RAG, not the only way — Stop 2
+        covers that trade-off in more depth, including what you'd give up by skipping a framework
+        entirely.
+      </p>
+    </section>
+
+    <div class="transit" role="img" aria-label="Pipeline map: Depot, PDF, Loader, Splitter, Embedding, FAISS, Retriever, Prompt, LLM, Answer, UI">
+      <div class="track"></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Depot</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">PDF</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Loader</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Splitter</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Embedding</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">FAISS</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Retriever</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Prompt</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">LLM</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">Answer</div></div>
+      <div class="station"><div class="dot"></div><div class="station-label">UI</div></div>
+    </div>
+    <p class="map-caption">11 stations, 5 stops. Pick a stop below to ride it.</p>
+
+    <div class="stops">
+      <a class="stop-card" href="01-project-setup.html">
+        <div class="stop-num">01</div>
+        <div>
+          <p class="stop-title">Project Initialization</p>
+          <p class="stop-desc">Config, dependencies, folder structure — the depot everything else departs from.</p>
+          <p class="stop-stations">Station: Depot</p>
+        </div>
+        <div class="stop-go">Start &rarr;</div>
+      </a>
+      <a class="stop-card" href="02-orchestration-framework.html">
+        <div class="stop-num">02</div>
+        <div>
+          <p class="stop-title">Orchestration framework</p>
+          <p class="stop-desc">Where LangChain earns its place — turning a PDF into page-level Documents, then small overlapping chunks ready to embed.</p>
+          <p class="stop-stations">Stations: PDF &rarr; Loader &rarr; Splitter</p>
+        </div>
+        <div class="stop-go">Start &rarr;</div>
+      </a>
+      <a class="stop-card" href="03-embedding-vector-store.html">
+        <div class="stop-num">03</div>
+        <div>
+          <p class="stop-title">Embedding + Vector Store</p>
+          <p class="stop-desc">Chunks become vectors — the embedding model's job — then vectors become a searchable, disk-cached index — the vector store's job.</p>
+          <p class="stop-stations">Stations: Embedding &rarr; FAISS</p>
+        </div>
+        <div class="stop-go">Start &rarr;</div>
+      </a>
+      <a class="stop-card" href="04-retrieval-augmented-generation.html">
+        <div class="stop-num">04</div>
+        <div>
+          <p class="stop-title">Retrieval-Augmented Generation</p>
+          <p class="stop-desc">A question finds its chunks, chunks fill a prompt, the model answers only from context.</p>
+          <p class="stop-stations">Stations: Retriever &rarr; Prompt &rarr; LLM &rarr; Answer</p>
+        </div>
+        <div class="stop-go">Start &rarr;</div>
+      </a>
+      <a class="stop-card" href="05-ui-framework.html">
+        <div class="stop-num">05</div>
+        <div>
+          <p class="stop-title">UI framework</p>
+          <p class="stop-desc">Turns the pipeline into something a person can click through and verify — no HTML, CSS, or JS required.</p>
+          <p class="stop-stations">Station: UI</p>
+        </div>
+        <div class="stop-go">Start &rarr;</div>
+      </a>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">Built while learning LangChain, one stop at a time.</footer>
+
+  <script>
+    (function() {
+      var root = document.documentElement;
+      var stored = localStorage.getItem('lc-theme');
+      if (stored) root.setAttribute('data-theme', stored);
+      var btn = document.getElementById('themeToggle');
+      function icon() {
+        var mode = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        btn.textContent = mode === 'dark' ? '☀' : '☽';
+      }
+      icon();
+      btn.addEventListener('click', function() {
+        var current = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        localStorage.setItem('lc-theme', next);
+        icon();
+      });
+    })();
+
+    (function() {
+      if (window.location.href.indexOf('/code/artifact/') === -1) return;
+      var ARTIFACT_MAP = {
+        'index.html': 'https://claude.ai/code/artifact/51beb0b3-8622-43d9-9cfb-31177e2934da',
+        '01-project-setup.html': 'https://claude.ai/code/artifact/52066b95-fa68-4e80-b64a-36ecd72ee0d4',
+        '02-orchestration-framework.html': 'https://claude.ai/code/artifact/0c23fd14-d2a0-4d52-a93b-65fe239b0645',
+        '03-embedding-vector-store.html': 'https://claude.ai/code/artifact/f57b24a0-e768-4ec9-b194-469d18536f24',
+        '04-retrieval-augmented-generation.html': 'https://claude.ai/code/artifact/04e3783b-4576-40be-8d0d-0f4c3f59d5f5',
+        '05-ui-framework.html': 'https://claude.ai/code/artifact/de4059dc-974f-45b9-8d63-f46af9db1838'
+      };
+      document.querySelectorAll('a[href]').forEach(function(a) {
+        var href = a.getAttribute('href');
+        if (ARTIFACT_MAP[href]) a.setAttribute('href', ARTIFACT_MAP[href]);
+      });
+    })();
+  </script>
+</body>
+</html>
